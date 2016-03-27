@@ -1,0 +1,167 @@
+/**************************************************************************/ 
+/*                                                                        */ 
+/*            Copyright (c) 1996-2000 by Express Logic Inc.               */ 
+/*                                                                        */ 
+/*  This software is copyrighted by and is the sole property of Express   */ 
+/*  Logic, Inc.  All rights, title, ownership, or other interests         */ 
+/*  in the software remain the property of Express Logic, Inc.  This      */ 
+/*  software may only be used in accordance with the corresponding        */ 
+/*  license agreement.  Any unauthorized use, duplication, transmission,  */ 
+/*  distribution, or disclosure of this software is expressly forbidden.  */ 
+/*                                                                        */
+/*  This Copyright notice may not be removed or modified without prior    */ 
+/*  written consent of Express Logic, Inc.                                */ 
+/*                                                                        */ 
+/*  Express Logic, Inc. reserves the right to modify this software        */ 
+/*  without notice.                                                       */ 
+/*                                                                        */ 
+/*  Express Logic, Inc.                                                   */
+/*  11440 West Bernardo Court               info@expresslogic.com         */
+/*  Suite 366                               http://www.expresslogic.com   */
+/*  San Diego, CA  92127                                                  */
+/*                                                                        */
+/**************************************************************************/
+
+
+/**************************************************************************/
+/**************************************************************************/
+/**                                                                       */ 
+/** ThreadX Component                                                     */ 
+/**                                                                       */
+/**   Thread Control (THR)                                                */
+/**                                                                       */
+/**************************************************************************/
+/**************************************************************************/
+
+
+/* #define    TX_SOURCE_CODE  */
+
+
+/* Include necessary system files.  */
+
+/*  #include   "tx_api.h"
+    #include   "tx_thr.h"  */
+
+
+    XREF    _tx_thread_current_ptr
+
+
+
+    SECT    .text,x
+    ALIGN   4
+/**************************************************************************/ 
+/*                                                                        */ 
+/*  FUNCTION                                               RELEASE        */ 
+/*                                                                        */ 
+/*    _tx_thread_stack_build                          68332/Green Hills   */ 
+/*                                                           3.0a         */ 
+/*  AUTHOR                                                                */ 
+/*                                                                        */ 
+/*    William E. Lamie, Express Logic, Inc.                               */ 
+/*                                                                        */ 
+/*  DESCRIPTION                                                           */ 
+/*                                                                        */ 
+/*    This function builds a stack frame on the supplied thread's stack.  */
+/*    The stack frame results in a fake interrupt return to the supplied  */
+/*    function pointer.                                                   */ 
+/*                                                                        */ 
+/*  INPUT                                                                 */ 
+/*                                                                        */ 
+/*    thread_ptr                            Pointer to thread control blk */
+/*    function_ptr                          Pointer to return function    */
+/*                                                                        */ 
+/*  OUTPUT                                                                */ 
+/*                                                                        */ 
+/*    None                                                                */
+/*                                                                        */ 
+/*  CALLS                                                                 */ 
+/*                                                                        */ 
+/*    None                                                                */
+/*                                                                        */ 
+/*  CALLED BY                                                             */ 
+/*                                                                        */ 
+/*    _tx_thread_create                     Create thread service         */
+/*                                                                        */ 
+/*  RELEASE HISTORY                                                       */ 
+/*                                                                        */ 
+/*    DATE              NAME                      DESCRIPTION             */ 
+/*                                                                        */ 
+/*  09-07-1999     William E. Lamie         Initial Version 3.0           */ 
+/*  12-02-1999     William E. Lamie         Modified comment(s) and       */ 
+/*											  insure word alignment for   */ 
+/*											  initial stack frame,		  */ 	
+/*                                            resulting in version 3.0a.  */ 
+/*                                                                        */ 
+/**************************************************************************/ 
+/* VOID   _tx_thread_stack_build(TX_THREAD *thread_ptr, VOID (*function_ptr)(VOID))
+{  */
+    XDEF    _tx_thread_stack_build
+_tx_thread_stack_build:
+
+       
+    /* Build a fake interrupt frame.  The form of the fake interrupt stack
+       on the 68xxx should look like the following after it is built:
+       
+       Stack Top:      1       Interrupt stack frame type
+                       d0      Initial value for d0
+                       d1      Initial value for d1
+                       d2      Initial value for d2
+                       d3      Initial value for d3
+                       d4      Initial value for d4
+                       d5      Initial value for d5
+                       d6      Initial value for d6
+                       d7      Initial value for d7
+                       a0      Initial value for a0
+                       a1      Initial value for a1
+                       a2      Initial value for d2
+                       a3      Initial value for d3
+                       a4      Initial value for a4
+                       a5      Initial value for a5
+                       a6      Initial value for a6
+                       6-bytes Reserved for ThreadX kernel use in ISR processing
+                       SR      Initial value of SR 
+                       PC      Initial value of PC (place to enter thread (function_ptr))
+                       0       To stop C back trace function
+
+    Stack Bottom: (higher memory address)  */
+
+    movea.l 4(%A7),%A1                      ; Pickup thread control block address
+    move.l  16(%A1),%D0                     ; Pickup the ending address
+    and.l   #$FFFFFFFE,%D0                  ; Ensure word alignment
+	subi	#2,%D0							; 
+	ori.l	#2,%D0							; 
+    movea.l %D0,%A0                         ; Use a0 to build the stack
+
+    /* Actually build the stack frame.  */
+
+    clr.l   -(%A0)                          ; Stop debugger backtrace
+    move.l  8(%A7),%D0                      ; Pickup function pointer
+    move.l  %D0,-(%A0)                      ; Place initial thread entry on the stack
+    move.w  #$2000,-(%A0)                   ; Place initial SR on the stack
+    sub.l   #6,%A0                          ; Reserve space for ISR
+    clr.l   -(%A0)                          ; Initial a6
+    clr.l   -(%A0)                          ; Initial a5
+    clr.l   -(%A0)                          ; Initial a4
+    clr.l   -(%A0)                          ; Initial a3
+    clr.l   -(%A0)                          ; Initial a2
+    clr.l   -(%A0)                          ; Initial a1
+    clr.l   -(%A0)                          ; Initial a0
+    clr.l   -(%A0)                          ; Initial d7
+    clr.l   -(%A0)                          ; Initial d6
+    clr.l   -(%A0)                          ; Initial d5
+    clr.l   -(%A0)                          ; Initial d4
+    clr.l   -(%A0)                          ; Initial d3
+    clr.l   -(%A0)                          ; Initial d2
+    clr.l   -(%A0)                          ; Initial d1
+    clr.l   -(%A0)                          ; Initial d0
+    move.w  #1,-(%A0)                       ; Interrupt stack type
+
+    /* Setup stack pointer.  */
+    /* thread_ptr -> tx_stack_ptr =  a0;  */
+
+    move.l  %A0,8(%A1)                      ; Store stack pointer in control block
+    rts                                     ; Return to caller
+/* }  */
+    END
+
+

@@ -1,0 +1,151 @@
+/**************************************************************************/ 
+/*                                                                        */ 
+/*            Copyright (c) 1996-2000 by Express Logic Inc.               */ 
+/*                                                                        */ 
+/*  This software is copyrighted by and is the sole property of Express   */ 
+/*  Logic, Inc.  All rights, title, ownership, or other interests         */ 
+/*  in the software remain the property of Express Logic, Inc.  This      */ 
+/*  software may only be used in accordance with the corresponding        */ 
+/*  license agreement.  Any unauthorized use, duplication, transmission,  */ 
+/*  distribution, or disclosure of this software is expressly forbidden.  */ 
+/*                                                                        */
+/*  This Copyright notice may not be removed or modified without prior    */ 
+/*  written consent of Express Logic, Inc.                                */ 
+/*                                                                        */ 
+/*  Express Logic, Inc. reserves the right to modify this software        */ 
+/*  without notice.                                                       */ 
+/*                                                                        */ 
+/*  Express Logic, Inc.                                                   */
+/*  11440 West Bernardo Court               info@expresslogic.com         */
+/*  Suite 366                               http://www.expresslogic.com   */
+/*  San Diego, CA  92127                                                  */
+/*                                                                        */
+/**************************************************************************/
+
+
+/**************************************************************************/
+/**************************************************************************/
+/**                                                                       */ 
+/** ThreadX Component                                                     */ 
+/**                                                                       */
+/**   Thread Control (THR)                                                */
+/**                                                                       */
+/**************************************************************************/
+/**************************************************************************/
+
+/* #define    TX_SOURCE_CODE  */
+
+
+/* Include necessary system files.  */
+
+/*  #include   "tx_api.h"
+    #include   "tx_thr.h"
+    #include   "tx_tim.h"  */
+
+
+    XREF    _tx_thread_current_ptr
+    XREF    _tx_thread_system_stack_ptr
+    XREF    _tx_timer_time_slice
+    XREF    _tx_thread_schedule
+
+
+    SECT    .text,x
+    ALIGN   4
+/**************************************************************************/ 
+/*                                                                        */ 
+/*  FUNCTION                                               RELEASE        */ 
+/*                                                                        */ 
+/*    _tx_thread_system_return                        68332/Green Hills   */ 
+/*                                                           3.0a         */ 
+/*  AUTHOR                                                                */ 
+/*                                                                        */ 
+/*    William E. Lamie, Express Logic, Inc.                               */ 
+/*                                                                        */ 
+/*  DESCRIPTION                                                           */ 
+/*                                                                        */ 
+/*    This function is target processor specific.  It is used to transfer */ 
+/*    control from a thread back to the system.  Only a minimal context   */ 
+/*    is saved since the compiler assumes temp registers are going to get */ 
+/*    slicked by a function call anyway.                                  */ 
+/*                                                                        */ 
+/*  INPUT                                                                 */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  OUTPUT                                                                */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  CALLS                                                                 */ 
+/*                                                                        */ 
+/*    _tx_thread_schedule                   Thread scheduling loop        */ 
+/*                                                                        */ 
+/*  CALLED BY                                                             */ 
+/*                                                                        */ 
+/*    ThreadX components                                                  */ 
+/*                                                                        */ 
+/*  RELEASE HISTORY                                                       */ 
+/*                                                                        */ 
+/*    DATE              NAME                      DESCRIPTION             */ 
+/*                                                                        */ 
+/*  09-07-1999     William E. Lamie         Initial Version 3.0           */ 
+/*  12-02-1999     William E. Lamie         Modified comment(s) and added */ 
+/*											  code to keep the thread's   */ 
+/*											  stack long word aligned,    */ 
+/*                                            resulting in version 3.0a.  */ 
+/*                                                                        */ 
+/**************************************************************************/ 
+/* VOID   _tx_thread_system_return(VOID)
+{  */
+    XDEF    _tx_thread_system_return
+_tx_thread_system_return:
+
+    /* Save minimal context on the stack.  */
+
+    adda    #-2,%A7							; Adjust stack for long word alignment
+    move.w  %SR,-(%A7)                      ; Save thread's status register
+    movem.l	%D2-%D7/%A2-%A6,-(%A7)          ; Save preserved registers on the
+                                        /*  ;   thread's stack  */
+    move.w  #0,-(%A7)                       ; Push the stack frame type on the
+                                        /*  ;   thread's stack  */
+	
+   /* Lockout interrupts.  */
+
+    ori.w   #$0700,%SR                      ; Lockout interrupt for serious 
+                                        /*  ;   business  */
+
+    /* Save current stack and switch to system stack.  */
+    /* _tx_thread_current_ptr -> tx_stack_ptr =  a7;
+    a7 = _tx_thread_system_stack_ptr;  */
+
+    movea.l _tx_thread_current_ptr,%A0      ; Point to thread's control block
+    move.l  %A7,8(%A0)                      ; Save thread's stack pointer
+    movea.l _tx_thread_system_stack_ptr,%A7 ; Switch to system stack
+
+    /* Determine if the time-slice is active.  */
+    /* if (_tx_timer_time_slice)
+    {  */
+    tst.l   _tx_timer_time_slice            ; Is a time-slice present?
+    beq     __tx_thread_dont_reset_ts       ; No, don't reset the time-slice
+
+	/* Setup a new time-slice for the thread and clear the current time-slice.  */
+	/* _tx_thread_current_ptr -> tx_time_slice =  
+					_tx_thread_current_ptr -> tx_new_time_slice;
+	_tx_timer_time_slice =  0;  */
+
+    move.l  28(%A0),%D0                     ; Pickup the fresh time-slice
+    move.l  %D0,24(%A0)                     ; Setup the time-slice for next execution
+    clr.l   _tx_timer_time_slice            ; Disable the time-slice
+
+    /* }  */
+__tx_thread_dont_reset_ts:
+
+    /* Clear the current thread pointer.  */
+    /* _tx_thread_current_ptr =  TX_NULL;  */
+
+    clr.l   _tx_thread_current_ptr          ; Set current thread pointer to NULL
+
+    jmp     _tx_thread_schedule             ; Return to thread scheduler
+/* }  */
+    END
+

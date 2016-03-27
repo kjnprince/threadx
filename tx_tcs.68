@@ -1,0 +1,231 @@
+/**************************************************************************/ 
+/*                                                                        */ 
+/*            Copyright (c) 1996-2000 by Express Logic Inc.               */ 
+/*                                                                        */ 
+/*  This software is copyrighted by and is the sole property of Express   */ 
+/*  Logic, Inc.  All rights, title, ownership, or other interests         */ 
+/*  in the software remain the property of Express Logic, Inc.  This      */ 
+/*  software may only be used in accordance with the corresponding        */ 
+/*  license agreement.  Any unauthorized use, duplication, transmission,  */ 
+/*  distribution, or disclosure of this software is expressly forbidden.  */ 
+/*                                                                        */
+/*  This Copyright notice may not be removed or modified without prior    */ 
+/*  written consent of Express Logic, Inc.                                */ 
+/*                                                                        */ 
+/*  Express Logic, Inc. reserves the right to modify this software        */ 
+/*  without notice.                                                       */ 
+/*                                                                        */ 
+/*  Express Logic, Inc.                                                   */
+/*  11440 West Bernardo Court               info@expresslogic.com         */
+/*  Suite 366                               http://www.expresslogic.com   */
+/*  San Diego, CA  92127                                                  */
+/*                                                                        */
+/**************************************************************************/
+
+
+/**************************************************************************/
+/**************************************************************************/
+/**                                                                       */ 
+/** ThreadX Component                                                     */ 
+/**                                                                       */
+/**   Thread Control (THR)                                                */
+/**                                                                       */
+/**************************************************************************/
+/**************************************************************************/
+
+
+/* #define    TX_SOURCE_CODE  */
+
+
+/* Include necessary system files.  */
+
+/*  #include   "tx_api.h"
+    #include   "tx_thr.h"
+    #include   "tx_tim.h"  */
+
+
+    XREF    _tx_thread_system_state
+    XREF    _tx_thread_current_ptr
+    XREF    _tx_thread_system_stack_ptr
+    XREF    _tx_initialize_ISR_start
+    XREF    _tx_initialize_ISR_end
+
+/* Define special nesting flag for 68K.  When this flag is set, an interrupt
+   occurred before the kernel could increment the nesting counter.  */
+
+/* UINT       _tx_thread_special_nest;  */
+
+	XCOM    _tx_thread_special_nest,4
+
+
+    SECT    .text,x
+    ALIGN   4
+/**************************************************************************/ 
+/*                                                                        */ 
+/*  FUNCTION                                               RELEASE        */ 
+/*                                                                        */ 
+/*    _tx_thread_context_save                         68332/Green Hills   */ 
+/*                                                           3.0a         */ 
+/*  AUTHOR                                                                */ 
+/*                                                                        */ 
+/*    William E. Lamie, Express Logic, Inc.                               */ 
+/*                                                                        */ 
+/*  DESCRIPTION                                                           */ 
+/*                                                                        */ 
+/*    This function saves the context of an executing thread in the       */ 
+/*    beginning of interrupt processing.  The function also ensures that  */ 
+/*    the system stack is used upon return to the calling ISR.            */ 
+/*                                                                        */ 
+/*  INPUT                                                                 */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  OUTPUT                                                                */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  CALLS                                                                 */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  CALLED BY                                                             */ 
+/*                                                                        */ 
+/*    ISRs                                                                */ 
+/*                                                                        */ 
+/*  RELEASE HISTORY                                                       */ 
+/*                                                                        */ 
+/*    DATE              NAME                      DESCRIPTION             */ 
+/*                                                                        */ 
+/*  09-07-1999     William E. Lamie         Initial Version 3.0           */ 
+/*  12-02-1999     William E. Lamie         Modified comment(s),          */ 
+/*                                            resulting in version 3.0a.  */ 
+/*                                                                        */ 
+/**************************************************************************/ 
+/* VOID   _tx_thread_context_save(VOID)
+{  */
+    XDEF    _tx_thread_context_save
+_tx_thread_context_save:
+    /* Upon entry to this routine, it is assumed that interrupts are locked
+       out and the stack looks like the following:
+
+           (lower address) SP   ->     ISR Return Address
+                           SP+4 ->     ISR Saved SR
+                           SP+6 ->     Interrupted SR
+                           SP+8 ->     Point of Interrupt
+
+       It is also important that all ISRs should originate in the designated
+       area and should conform to this calling convention.  Please see interrupt
+       handling section of readme.txt and comments in tx_ill.68.  */
+
+    /* Check for a nested interrupt condition.  */
+    /* if (_tx_thread_system_state++)
+    {  */
+
+    tst.l   _tx_thread_system_state             ; Check for nested interrupts
+    beq     __tx_thread_not_nested_save         ; If 0, not in nested save 
+                                        /*      ;   condition yet  */
+
+    /* Nested interrupt condition.  */
+
+    addq.l  #1,_tx_thread_system_state          ; Increment the nested counter
+
+	/* Save the scratch registers on the stack and return to the
+      calling ISR.  */
+
+    movem.l %D0-%D1/%A0-%A1,-(%A7)              ; Save scratch registers of interrupted
+                                        /*      ;   routine.  Additional registers are
+                                                ;   saved if utilized by C ISRs.  */
+
+    /* Restore the saved SR and return to the ISR.  */
+
+    movea.l 16(%A7),%A0                         ; ISR return address in a0
+    move.w  20(%A7),%SR                         ; Recover ISR original SR
+    jmp     (%A0)                               ; Return to ISR
+
+__tx_thread_not_nested_save:
+    /* }  */
+
+    /* Otherwise, not nested, check to see if a thread was running.  */
+    /* else if (_tx_thread_current_ptr)
+    {  */
+
+    addq.l  #1,_tx_thread_system_state          ; Increment the nested counter
+    clr.b   _tx_thread_special_nest             ; Clear the special nesting flag
+    tst.l   _tx_thread_current_ptr	            ; Determine if a thread is running
+    beq.s   __tx_thread_idle_system_save        ; If not, skip to idle system save
+
+    /* Save minimal context on the current stack.  */
+
+    movem.l %D0-%D1/%A0-%A1,-(%A7)              ; Save compiler scratch registers
+
+    /* Determine if a lower-level ISR was interrupted on the way to this 
+       routine.  Note: in order for this to work, all ISR front ends must 
+       reside between the labels _tx_intialize_ISR_start and _tx_intialize_ISR_end.
+       This area is defined in the file tx_ill.68.  */
+
+    lea     _tx_initialize_ISR_end,%A0          ; Pickup ending ISR address
+    cmpa.l  24(%A7),%A0                         ; Compare end with point of 
+                                        /*      ;   interrupt  */
+    blt     __tx_thread_not_special_nest        ; Nope, not special nested
+    lea     _tx_initialize_ISR_start,%A0        ; Pickup starting ISR address
+    cmpa.l  24(%A7),%A0                         ; Compare end with point of 
+                                        /*      ;   interrupt  */
+    bgt     __tx_thread_not_special_nest        ; Nope, not special nested
+    move.b  #1,_tx_thread_special_nest          ; Yes, set the special nested
+                                        /*      ;   flag  */
+__tx_thread_not_special_nest:
+
+    /* Save the current stack pointer in the thread's control block.  */
+    /* _tx_thread_current_ptr -> tx_stack_ptr =  sp;  */
+
+    movea.l _tx_thread_current_ptr,%A0          ; Pickup thread's control block address
+    move.l  %A7,8(%A0)                          ; Save stack pointer
+
+    /* Switch to the system stack.  */
+    /* tmp_sp =  _tx_thread_system_stack_ptr;  */
+
+    movea.l 16(%A7),%A0                         ; ISR return address in a0
+    move.w  20(%A7),%D0                         ; Recover ISR original SR
+    movea.l _tx_thread_system_stack_ptr,%A7     ; Setup system stack
+    move.w  %D0,%SR                             ; Actually setup SR
+    jmp     (%A0)                               ; Return to ISR
+    /* }
+    else
+    {  */
+
+__tx_thread_idle_system_save:
+
+        /* Interrupt occurred in the scheduling loop.  */
+
+        /* Check for special nesting condition.  */
+
+    move.l  %A0,-(%A7)                          ; Save a0 on the stack
+    lea     _tx_initialize_ISR_end,%A0          ; Pickup ending ISR address
+    cmpa.l  12(%A7),%A0                         ; Compare end with point of interrupt
+    blt     __tx_thread_not_special_nest_idle   ; Nope, not special nested
+    lea     _tx_initialize_ISR_start,%A0        ; Pickup starting ISR address
+    cmpa.l  12(%A7),%A0                         ; Compare end with point of interrupt
+    bgt     __tx_thread_not_special_nest_idle   ; Nope, not special nested
+    move.b  #1,_tx_thread_special_nest          ; Yes, set the special nested flag
+    movea.l (%A7)+,%A0                          ; Recover a0
+    movem.l %D0-D1/%A0-%A1,-(%A7)               ; Save compiler scratch registers on
+                                        /*      ;   the system stack  */
+    movea.l 16(%A7),%A0                         ; ISR return address in a0
+    move.w  20(%A7),%SR                         ; Recover ISR's SR
+    jmp     (%A0)                               ; Return to ISR
+
+__tx_thread_not_special_nest_idle:
+
+    /* Not much to do here, just pickup the return address, restore the ISR's 
+       SR, and return to the calling ISR.  */
+
+    addq.l  #4,%A7                              ; Position past saved a0
+    movea.l (%A7)+,%A0                          ; Return address is in a0
+    move.w  (%A7)+,%D0                          ; Recover ISR's SR
+    movea.l _tx_thread_system_stack_ptr,%A7	    ; Reset system stack pointer
+    move.w  %D0,%SR                             ; Recover ISR's SR
+    jmp     (%A0)                               ; Return to calling ISR
+
+    /* }
+}  */
+    END

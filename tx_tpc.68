@@ -1,0 +1,140 @@
+/**************************************************************************/ 
+/*                                                                        */ 
+/*            Copyright (c) 1996-2000 by Express Logic Inc.               */ 
+/*                                                                        */ 
+/*  This software is copyrighted by and is the sole property of Express   */ 
+/*  Logic, Inc.  All rights, title, ownership, or other interests         */ 
+/*  in the software remain the property of Express Logic, Inc.  This      */ 
+/*  software may only be used in accordance with the corresponding        */ 
+/*  license agreement.  Any unauthorized use, duplication, transmission,  */ 
+/*  distribution, or disclosure of this software is expressly forbidden.  */ 
+/*                                                                        */
+/*  This Copyright notice may not be removed or modified without prior    */ 
+/*  written consent of Express Logic, Inc.                                */ 
+/*                                                                        */ 
+/*  Express Logic, Inc. reserves the right to modify this software        */ 
+/*  without notice.                                                       */ 
+/*                                                                        */ 
+/*  Express Logic, Inc.                                                   */
+/*  11440 West Bernardo Court               info@expresslogic.com         */
+/*  Suite 366                               http://www.expresslogic.com   */
+/*  San Diego, CA  92127                                                  */
+/*                                                                        */
+/**************************************************************************/
+
+
+/**************************************************************************/
+/**************************************************************************/
+/**                                                                       */ 
+/** ThreadX Component                                                     */ 
+/**                                                                       */
+/**   Thread Control (THR)                                                */
+/**                                                                       */
+/**************************************************************************/
+/**************************************************************************/
+
+
+/* #define    TX_SOURCE_CODE  */
+
+
+/* Include necessary system files.  */
+
+/*  #include   "tx_api.h"
+    #include   "tx_thr.h"  */
+
+
+    XREF    _tx_thread_current_ptr
+    XREF    _tx_thread_execute_ptr
+    XREF    _tx_thread_context_save
+    XREF    _tx_thread_context_restore
+
+
+    SECT    .text,x
+    ALIGN   4
+/**************************************************************************/ 
+/*                                                                        */ 
+/*  FUNCTION                                               RELEASE        */ 
+/*                                                                        */ 
+/*    _tx_thread_preempt_check                        68332/Green Hills   */ 
+/*                                                           3.0a         */ 
+/*  AUTHOR                                                                */ 
+/*                                                                        */ 
+/*    William E. Lamie, Express Logic, Inc.                               */ 
+/*                                                                        */ 
+/*  DESCRIPTION                                                           */ 
+/*                                                                        */ 
+/*    This function checks for a preempt condition that might have taken  */ 
+/*    place on top of an optimized assembly language ISR.  If preemption  */ 
+/*    should take place, context save/restore processing is called.	      */ 
+/*                                                                        */ 
+/*  INPUT                                                                 */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  OUTPUT                                                                */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  CALLS                                                                 */ 
+/*                                                                        */ 
+/*    _tx_thread_context_save               Save thread's context         */ 
+/*    _tx_thread_context_restore            Restore thread's context      */ 
+/*                                                                        */ 
+/*  CALLED BY                                                             */ 
+/*                                                                        */ 
+/*    Optimized ISRs                                                      */ 
+/*                                                                        */ 
+/*  RELEASE HISTORY                                                       */ 
+/*                                                                        */ 
+/*    DATE              NAME                      DESCRIPTION             */ 
+/*                                                                        */ 
+/*  09-07-1999     William E. Lamie         Initial Version 3.0           */ 
+/*  12-02-1999     William E. Lamie         Modified comment(s),          */ 
+/*                                            resulting in version 3.0a.  */ 
+/*                                                                        */ 
+/**************************************************************************/ 
+/* VOID   _tx_thread_preempt_check(VOID)
+{  */
+    XDEF    _tx_thread_preempt_check
+_tx_thread_preempt_check:
+
+   /* Upon entry to this routine, it is assumed that interrupts are locked
+      out and the stack looks like the following:
+
+           (lower address) SP ->	ISR Saved SR
+                           SP+2 -> Interrupted SR
+                           SP+4 -> Point of Interrupt
+
+       It is also important that all ISRs should originate in the designated
+       area and should conform to this calling convention.  */
+
+    move.l  %D0,-(%A7)                  ; Save d0
+
+    /* See if the current thread is the same as the next thread to execute.  If so,
+       skip preempt processing.  Otherwise, call save/restore context to 
+       process the preemption.  */
+    /* if (_tx_thread_current_ptr != _tx_thread_execute_ptr)
+    {  */
+
+    move.l  _tx_thread_current_ptr,%D0  ; Pickup the current thread pointer
+    beq     __tx_thread_skip_preempt    ; No thread is running
+    cmp.l   _tx_thread_execute_ptr,%D0  ; Is there another higher-priority
+                                    /*  ;   thread ready?  */
+    beq     __tx_thread_skip_preempt    ; No, skip the preempt processing
+
+        /* Process the preemption by calling save/restore context routines.  */
+        /* _tx_thread_context_save();
+        _tx_thread_context_restore();  */
+
+    move.l  (%A7)+,%D0                  ; Recover d0
+    jsr     _tx_thread_context_save     ; Save context 
+    jmp     _tx_thread_context_restore  ; Restore context, never come back!
+
+    /* }  */
+
+__tx_thread_skip_preempt:
+    move.l  (%A7)+,%D0                  ; Recover d0
+    addq.l  #2,%A7                      ; Position past saved SR
+    rte                                 ; Return to point of interrupt
+/* }  */
+    END

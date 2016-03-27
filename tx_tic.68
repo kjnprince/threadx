@@ -1,0 +1,107 @@
+/**************************************************************************/ 
+/*                                                                        */ 
+/*            Copyright (c) 1996-2000 by Express Logic Inc.               */ 
+/*                                                                        */ 
+/*  This software is copyrighted by and is the sole property of Express   */ 
+/*  Logic, Inc.  All rights, title, ownership, or other interests         */ 
+/*  in the software remain the property of Express Logic, Inc.  This      */ 
+/*  software may only be used in accordance with the corresponding        */ 
+/*  license agreement.  Any unauthorized use, duplication, transmission,  */ 
+/*  distribution, or disclosure of this software is expressly forbidden.  */ 
+/*                                                                        */
+/*  This Copyright notice may not be removed or modified without prior    */ 
+/*  written consent of Express Logic, Inc.                                */ 
+/*                                                                        */ 
+/*  Express Logic, Inc. reserves the right to modify this software        */ 
+/*  without notice.                                                       */ 
+/*                                                                        */ 
+/*  Express Logic, Inc.                                                   */
+/*  11440 West Bernardo Court               info@expresslogic.com         */
+/*  Suite 366                               http://www.expresslogic.com   */
+/*  San Diego, CA  92127                                                  */
+/*                                                                        */
+/**************************************************************************/
+
+
+/**************************************************************************/
+/**************************************************************************/
+/**                                                                       */ 
+/** ThreadX Component                                                     */ 
+/**                                                                       */
+/**   Thread Control (THR)                                                */
+/**                                                                       */
+/**************************************************************************/
+/**************************************************************************/
+
+/* #define    TX_SOURCE_CODE  */
+
+
+/* Include necessary system files.  */
+
+/*  #include   "tx_api.h"
+    #include   "tx_thr.h"  */
+
+
+	SECT	.text,x
+    ALIGN   4
+/**************************************************************************/ 
+/*                                                                        */ 
+/*  FUNCTION                                               RELEASE        */ 
+/*                                                                        */ 
+/*    _tx_thread_interrupt_control                    68332/Green Hills   */ 
+/*                                                           3.0a         */ 
+/*  AUTHOR                                                                */ 
+/*                                                                        */ 
+/*    William E. Lamie, Express Logic, Inc.                               */ 
+/*                                                                        */ 
+/*  DESCRIPTION                                                           */ 
+/*                                                                        */ 
+/*    This function is responsible for changing the interrupt lockout     */ 
+/*    posture of the system.                                              */ 
+/*                                                                        */ 
+/*  INPUT                                                                 */ 
+/*                                                                        */ 
+/*    new_posture                           New interrupt lockout posture */ 
+/*                                                                        */ 
+/*  OUTPUT                                                                */ 
+/*                                                                        */ 
+/*    old_posture                           Old interrupt lockout posture */ 
+/*                                                                        */ 
+/*  CALLS                                                                 */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  CALLED BY                                                             */ 
+/*                                                                        */ 
+/*    Application Code                                                    */ 
+/*                                                                        */ 
+/*  RELEASE HISTORY                                                       */ 
+/*                                                                        */ 
+/*    DATE              NAME                      DESCRIPTION             */ 
+/*                                                                        */ 
+/*  09-07-1999     William E. Lamie         Initial Version 3.0           */ 
+/*  12-02-1999     William E. Lamie         Modified comment(s),          */ 
+/*                                            resulting in version 3.0a.  */ 
+/*                                                                        */ 
+/**************************************************************************/ 
+/* UINT   _tx_thread_interrupt_control(UINT new_posture)
+{  */
+    XDEF  _tx_thread_interrupt_control
+_tx_thread_interrupt_control:
+
+    /* Pickup current interrupt lockout posture.  */
+
+    clr.l   %D0                         ; Clear out d0
+    move.w  %SR,%D0                     ; Status register is in d0
+    move.l  %D0,%D1                     ; Copy it into d1
+    andi.w  #$0700,%D0                  ; Clear non-interrupt bits
+
+    /* Apply the new interrupt posture.  */
+
+    andi.w  #$F8FF,%D1                  ; Clear only the interrupt bits
+    or.w    6(%A7),%D1                  ; Setup new posture
+    move.w  %D1,%SR                     ; Apply it to the status register
+
+    rts                                 ; Return to caller
+/* }  */
+    END

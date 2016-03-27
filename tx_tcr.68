@@ -1,0 +1,240 @@
+/**************************************************************************/ 
+/*                                                                        */ 
+/*            Copyright (c) 1996-2000 by Express Logic Inc.               */ 
+/*                                                                        */ 
+/*  This software is copyrighted by and is the sole property of Express   */ 
+/*  Logic, Inc.  All rights, title, ownership, or other interests         */ 
+/*  in the software remain the property of Express Logic, Inc.  This      */ 
+/*  software may only be used in accordance with the corresponding        */ 
+/*  license agreement.  Any unauthorized use, duplication, transmission,  */ 
+/*  distribution, or disclosure of this software is expressly forbidden.  */ 
+/*                                                                        */
+/*  This Copyright notice may not be removed or modified without prior    */ 
+/*  written consent of Express Logic, Inc.                                */ 
+/*                                                                        */ 
+/*  Express Logic, Inc. reserves the right to modify this software        */ 
+/*  without notice.                                                       */ 
+/*                                                                        */ 
+/*  Express Logic, Inc.                                                   */
+/*  11440 West Bernardo Court               info@expresslogic.com         */
+/*  Suite 366                               http://www.expresslogic.com   */
+/*  San Diego, CA  92127                                                  */
+/*                                                                        */
+/**************************************************************************/
+
+
+/**************************************************************************/
+/**************************************************************************/
+/**                                                                       */ 
+/** ThreadX Component                                                     */ 
+/**                                                                       */
+/**   Thread Control (THR)                                                */
+/**                                                                       */
+/**************************************************************************/
+/**************************************************************************/
+
+
+/* #define    TX_SOURCE_CODE  */
+
+
+/* Include necessary system files.  */
+
+/*  #include   "tx_api.h"
+    #include   "tx_thr.h"
+    #include   "tx_tim.h"  */
+
+
+    XREF    _tx_thread_system_state
+    XREF    _tx_thread_current_ptr
+    XREF    _tx_thread_system_stack_ptr
+    XREF    _tx_thread_execute_ptr
+    XREF    _tx_timer_time_slice
+    XREF    _tx_thread_schedule
+    XREF    _tx_thread_special_nest
+    XREF    _tx_thread_preempt_disable
+#ifdef  TX_ENABLE_EVENT_LOGGING
+	XREF	_tx_el_thread_preempted
+#endif
+
+
+	SECT    .text,x
+    ALIGN   4
+/**************************************************************************/ 
+/*                                                                        */ 
+/*  FUNCTION                                               RELEASE        */ 
+/*                                                                        */ 
+/*    _tx_thread_context_restore                      68332/Green Hills   */ 
+/*                                                           3.0a         */ 
+/*  AUTHOR                                                                */ 
+/*                                                                        */ 
+/*    William E. Lamie, Express Logic, Inc.                               */ 
+/*                                                                        */ 
+/*  DESCRIPTION                                                           */ 
+/*                                                                        */ 
+/*    This function restores the interrupt context if it is processing a  */ 
+/*    nested interrupt.  If not, it returns to the interrupt thread if no */ 
+/*    preemption is necessary.  Otherwise, if preemption is necessary or  */ 
+/*    if no thread was running, the function returns to the scheduler.    */ 
+/*                                                                        */ 
+/*  INPUT                                                                 */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  OUTPUT                                                                */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  CALLS                                                                 */ 
+/*                                                                        */ 
+/*    _tx_thread_schedule                   Thread scheduling routine     */ 
+/*                                                                        */ 
+/*  CALLED BY                                                             */ 
+/*                                                                        */ 
+/*    ISRs                                  Interrupt Service Routines    */ 
+/*                                                                        */ 
+/*  RELEASE HISTORY                                                       */ 
+/*                                                                        */ 
+/*    DATE              NAME                      DESCRIPTION             */ 
+/*                                                                        */ 
+/*  09-07-1999     William E. Lamie         Initial Version 3.0           */ 
+/*  12-02-1999     William E. Lamie         Modified comment(s), and      */ 
+/*                                            added optional event        */ 
+/*                                            logging for preemption,     */ 
+/*                                            resulting in version 3.0a.  */ 
+/*                                                                        */ 
+/**************************************************************************/ 
+/* VOID   _tx_thread_context_restore(VOID)
+{  */
+    XDEF    _tx_thread_context_restore
+_tx_thread_context_restore:
+
+    /* Lockout interrupts.  */
+
+    ori.w   #$0700,%SR                          ; Lockout interrupts
+
+    /* Determine if interrupts are nested.  */
+    /* if (--_tx_thread_system_state)
+    {  */
+
+    subq.l  #1,_tx_thread_system_state          ; Decrement the system state
+                                        /*      ;   (Nested interrupt count)  */
+    beq.s   __tx_thread_not_nested_restore      ; Not a pure nested restore
+
+    /* Interrupts are nested.  */
+
+    /* Just recover the saved registers and return to the point of 
+       interrupt.  */
+
+    movem.l (%A7)+,%D0-%D1/%A0-%A1              ; Recover saved registers
+    addq.l  #6,%A7                              ; Position past scratch area
+    rte                                         ; Return to point of interrupt
+
+    /* }  */
+__tx_thread_not_nested_restore:
+
+    /* Determine if a thread was interrupted and no preemption is required.  */
+    /* else if ((_tx_thread_current_ptr) && (_tx_thread_current_ptr == _tx_thread_execute_ptr))
+    {  */
+
+    move.l  _tx_thread_current_ptr,%D0          ; Pickup current thread pointer
+    beq     __tx_thread_idle_system_restore     ; If NULL, an idle system restore is present
+
+    /* For 68K targets, check for special nesting condition.  */
+
+    movea.l %D0,%A0                             ; Setup thread control block pointer 
+    tst.b   _tx_thread_special_nest             ; Is a special nesting condition present?
+    bne     __tx_thread_special_restore         ; Special thread restore from this
+                                        /*      ;   kind of nesting  */
+    tst.l   _tx_thread_preempt_disable          ; See if preemption is disabled
+    bne     __tx_thread_no_preempt_restore      ; Yes, allways restore back to interrupted 
+                                        /*      ;   thread  */
+    cmp.l   _tx_thread_execute_ptr,%D0          ; See if preemption needs to happen
+    bne     __tx_thread_preempt_restore         ; If not the same, preemption needs
+                                        /*      ;   to happen  */
+__tx_thread_special_restore:
+__tx_thread_no_preempt_restore:
+
+    /* Restore interrupted thread or ISR.  */
+
+    /* Pickup the saved stack pointer.  */
+    /* tmp_ptr =  _tx_thread_current_ptr -> tx_stack_ptr;  */
+
+    movea.l 8(%A0),%A7                          ; Switch back to thread's stack
+
+	/* Recover the saved context and return to the point of interrupt.  */
+
+    movem.l (%A7)+,%D0-%D1/%A0-%A1              ; Recover saved registers
+    addq.l  #6,%A7                              ; Position past the scratch area 
+                                        /*      ;   the interrupt stack  */
+    rte                                         ; Return to point of interrupt
+    /* }
+    else
+    {  */
+__tx_thread_preempt_restore:
+
+    movea.l 8(%A0),%A7                          ; Switch back to thread's stack
+    move.l  %A7,%D0                             ; Save the final sp before we lose pointer
+    subi.l  #46,%D0                             ; Number of bytes to store the whole 
+                                        /*      ;   interrupt frame  */
+    move.l  %D0,8(%A0)                          ; Save final stack pointer in thread's
+                                        /*      ;   control block  */
+
+#ifdef  TX_ENABLE_EVENT_LOGGING
+	move.l	%A0,-(%A7)							; Save thread control block pointer
+	move.l	%A0,-(%A7)							; Place thread control block as parameter
+	jsr		_tx_el_thread_preempted				; Call event logging
+	addq	#4,%A7								; Adjust past input parameter
+	move.l	(%A7)+,%A0							; Recover thread control block pointer
+#endif
+
+    /* Save the remaining time-slice and disable it.  */
+    /* if (_tx_timer_time_slice)
+    {  */
+
+    move.l  _tx_timer_time_slice,%D0            ; Pickup current time-slice
+    beq     __tx_thread_dont_save_ts            ; If 0, don't save the current time-slice
+
+        /* _tx_thread_current_ptr -> tx_time_slice =  _tx_timer_time_slice;
+        _tx_timer_time_slice =  0;  */
+
+    move.l  %D0,24(%A0)                         ; Save time-slice for equality
+    clr.l   _tx_timer_time_slice                ; Disable time-slice
+
+    /* }  */
+__tx_thread_dont_save_ts:
+
+    /* Recover previously saved registers and then save the entire interrupt
+       frame on the thread's stack.  */
+
+    movem.l (%A7)+,%D0-%D1/%A0-%A1              ; Recover previously saved registers
+    movem.l %D0-%D7/%A0-%A6,-(%A7)              ; Save all registers together
+    move.w  #1,-(%A7)                           ; Place stack type on the stack
+    movea.l _tx_thread_system_stack_ptr,%A7	    ; Switch to system stack pointer
+
+    /* Clear the current task pointer.  */
+    /* _tx_thread_current_ptr =  TX_NULL;  */
+
+    clr.l   _tx_thread_current_ptr              ; Set current thread pointer to NULL
+
+    /* Return to the scheduler.  */
+    /* _tx_thread_schedule();  */
+
+    jmp     _tx_thread_schedule                 ; Return to scheduling loop
+    /* }  */
+
+__tx_thread_idle_system_restore:
+
+    /* Make a quick check for the special nesting condition that can
+       occur on 68K targets.  */
+
+    tst.b   _tx_thread_special_nest             ; Is special nesting present?
+    bne     __tx_thread_idle_special_restore    ; Yes, skip to the idle system
+                                        /*      ;   restore processing  */
+    jmp     _tx_thread_schedule                 ; Else, just return to scheduler
+__tx_thread_idle_special_restore:
+    movem.l	(%A7)+,%D0-%D1/%A0-%A1              ; Recover saved registers
+    addq.l  #6,%A7                              ; Position past the scratch area 
+                                        /*      ;   on interrupt stack  */
+    rte                                         ; Return to point of interrupt
+/* }  */
+

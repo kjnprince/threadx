@@ -1,0 +1,25 @@
+SECTIONS
+{
+	.vector 0	: { . += 0x400; }
+
+    /* 68332 Evaluation Board */
+
+    GROUP 0x5000  : {
+	.text		    : { *(.text) *(_S9) }
+    .syscall	    : { *(.syscall) *(_S5) }
+	.secinfo	    : { }
+    .rodata         : { }
+	.data		    : { *(.data) *(_S13) }
+	.bss CLEAR(0)   : { *(.bss)  *(_S14) }
+	.heap		    : { . += 0x1000; }	/* 4K of heap */
+	.stack 		    : { . += 0x1000; }	/* 4K of stack */
+    .freemem        : { . += 0x10000;}  /* Define free memory area */
+    }
+
+    .events     0x30000 : { . += 0x10000; } /* Event log pool  */
+
+	.p68332     0xFFFA00	: { . += 0x400; }
+}
+
+__ghs_checksum = 0;
+

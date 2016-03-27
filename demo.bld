@@ -1,0 +1,19 @@
+#!build
+default:
+	program
+    :m68_cputype=6833x
+	:m68_fputype=none
+	:m68_picode=absolute
+	:m68_pidata=absolute
+	:remote=s68 68020
+	:driver_opts=-map
+	:libdirs=.
+	:libraries=tx.olb
+tx_ill.68
+	assembly
+demo.c
+	C
+demo.lnk
+	linker_file
+readme.txt
+	documentation

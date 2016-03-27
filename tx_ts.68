@@ -1,0 +1,168 @@
+/**************************************************************************/ 
+/*                                                                        */ 
+/*            Copyright (c) 1996-2000 by Express Logic Inc.               */ 
+/*                                                                        */ 
+/*  This software is copyrighted by and is the sole property of Express   */ 
+/*  Logic, Inc.  All rights, title, ownership, or other interests         */ 
+/*  in the software remain the property of Express Logic, Inc.  This      */ 
+/*  software may only be used in accordance with the corresponding        */ 
+/*  license agreement.  Any unauthorized use, duplication, transmission,  */ 
+/*  distribution, or disclosure of this software is expressly forbidden.  */ 
+/*                                                                        */
+/*  This Copyright notice may not be removed or modified without prior    */ 
+/*  written consent of Express Logic, Inc.                                */ 
+/*                                                                        */ 
+/*  Express Logic, Inc. reserves the right to modify this software        */ 
+/*  without notice.                                                       */ 
+/*                                                                        */ 
+/*  Express Logic, Inc.                                                   */
+/*  11440 West Bernardo Court               info@expresslogic.com         */
+/*  Suite 366                               http://www.expresslogic.com   */
+/*  San Diego, CA  92127                                                  */
+/*                                                                        */
+/**************************************************************************/
+
+
+/**************************************************************************/
+/**************************************************************************/
+/**                                                                       */ 
+/** ThreadX Component                                                     */ 
+/**                                                                       */
+/**   Thread Control (THR)                                                */
+/**                                                                       */
+/**************************************************************************/
+/**************************************************************************/
+
+
+/* #define    TX_SOURCE_CODE  */
+
+
+/* Include necessary system files.  */
+
+/*  #include   "tx_api.h"
+    #include   "tx_thr.h"
+    #include   "tx_tim.h"  */
+
+
+    XREF    _tx_thread_execute_ptr
+    XREF    _tx_thread_current_ptr
+    XREF    _tx_timer_time_slice
+#ifdef TX_ENABLE_EVENT_LOGGING
+	XREF	_tx_el_thread_running
+#endif
+
+
+    SECT    .text,x
+    ALIGN   4
+/**************************************************************************/ 
+/*                                                                        */ 
+/*  FUNCTION                                               RELEASE        */ 
+/*                                                                        */ 
+/*    _tx_thread_schedule                             68332/Green Hills   */ 
+/*                                                           3.0a         */ 
+/*  AUTHOR                                                                */ 
+/*                                                                        */ 
+/*    William E. Lamie, Express Logic, Inc.                               */ 
+/*                                                                        */ 
+/*  DESCRIPTION                                                           */ 
+/*                                                                        */ 
+/*    This function waits for a thread control block pointer to appear in */ 
+/*    the _tx_thread_execute_ptr variable.  Once a thread pointer appears */ 
+/*    in the variable, the corresponding thread is resumed.               */ 
+/*                                                                        */ 
+/*  INPUT                                                                 */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  OUTPUT                                                                */ 
+/*                                                                        */ 
+/*    None                                                                */
+/*                                                                        */ 
+/*  CALLS                                                                 */ 
+/*                                                                        */ 
+/*    None                                                                */
+/*                                                                        */ 
+/*  CALLED BY                                                             */ 
+/*                                                                        */ 
+/*    _tx_initialize_kernel_enter          ThreadX entry function         */ 
+/*    _tx_thread_system_return             Return to system from thread   */ 
+/*    _tx_thread_context_restore           Restore thread's context       */ 
+/*                                                                        */ 
+/*  RELEASE HISTORY                                                       */ 
+/*                                                                        */ 
+/*    DATE              NAME                      DESCRIPTION             */ 
+/*                                                                        */ 
+/*  09-07-1999     William E. Lamie         Initial Version 3.0           */ 
+/*  12-02-1999     William E. Lamie         Modified comment(s),          */ 
+/*                                            added optional thread       */ 
+/*                                            ready event logging, and    */ 
+/*											  added logic for long word   */ 
+/*											  solicited stack alignment,  */ 
+/*                                            resulting in version 3.0a.  */ 
+/*                                                                        */ 
+/**************************************************************************/ 
+/* VOID   _tx_thread_schedule(VOID)
+{  */
+    XDEF    _tx_thread_schedule
+_tx_thread_schedule:
+
+    /* Enable interrupts.  */
+
+    move.w  #$2000,%SR
+
+    /* Wait for a thread to execute.  */
+    /* do
+    {  */
+__tx_thread_schedule_loop:
+
+    tst.l   _tx_thread_execute_ptr
+    beq.s   __tx_thread_schedule_loop
+
+    /* }
+    while(_tx_thread_execute_ptr == TX_NULL);  */
+    
+    /* Yes! We have a thread to execute.  Lockout interrupts and
+       transfer control to it.  */
+
+    movea.l _tx_thread_execute_ptr,%A0
+    ori.w   #$2700,%SR                  ; Lockout interrupts
+
+    /* Setup the current thread pointer.  */
+    /* _tx_thread_current_ptr =  _tx_thread_execute_ptr;  */
+
+    move.l  %A0,_tx_thread_current_ptr  ; Setup current thread pointer
+
+
+    /* Increment the run count for this thread.  */
+    /* _tx_thread_current_ptr -> tx_run_count++;  */
+
+    addq.l  #1,4(%A0)                   ; Increment run counter
+
+    /* Setup time-slice, if present.  */
+    /* _tx_timer_time_slice =  _tx_thread_current_ptr -> tx_time_slice;  */
+
+    move.l  24(%A0),%D1                 ; Pickup the time-slice value
+    move.l  %D1,_tx_timer_time_slice    ; Set up time slice
+
+    /* Switch to the thread's stack.  */
+    /* SP =  _tx_thread_execute_ptr -> tx_stack_ptr;  */
+
+    movea.l 8(%A0),%A7                  ; Pickup stack pointer
+
+    /* Determine if an interrupt frame or a synchronous task suspension frame
+	   is present.  */
+
+    move.w  (%A7)+,%D0                  ; Pickup stack type
+    beq     __tx_thread_synch_return    ; If 0, a synchronous return frame is present
+    movem.l (%A7)+,%D0-%D7/%A0-%A6      ; Otherwise, recover all registers because this
+                                    /*  ;   is an interrupt stack frame!  */
+    add.l   #6,%A7                      ; Skip past reserved space for ISR processing
+    rte                                 ; Return to point of interrupt in thread
+__tx_thread_synch_return:
+    movem.l (%A7)+,%D2-%D7/%A2-%A6      ; Recover minimal register set
+    move.w  (%A7)+,%SR                  ; Recover thread's status register
+	adda	#2,%A7						; Recover alignment word
+    rts                                 ; Return to thread where it last returned to the
+                                    /*  ;   kernel  */
+/* }  */
+    END

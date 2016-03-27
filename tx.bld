@@ -1,0 +1,221 @@
+#!build
+default:
+	library
+        :m68_cputype=6833x
+        :outputname=tx.olb
+tx_api.h
+	include_file
+tx_port.h
+	include_file
+tx_tsb.68
+	assembly
+tx_ts.68
+	assembly
+tx_tsr.68
+	assembly
+tx_tcs.68
+	assembly
+tx_tcr.68
+	assembly
+tx_tic.68
+	assembly
+tx_timin.68
+	assembly
+tx_tpc.68
+	assembly
+tx_ihl.c
+	C
+tx_ike.c
+	C
+tx_timi.c
+	C
+tx_ti.c
+	C
+tx_tse.c
+	C
+tx_tsus.c
+	C
+tx_tsa.c
+	C
+tx_tra.c
+	C
+tx_tc.c
+	C
+tx_tr.c
+	C
+tx_trel.c
+	C
+tx_tts.c
+	C
+tx_tte.c
+	C
+tx_ta.c
+	C
+tx_tto.c
+	C
+tx_tsle.c
+	C
+tx_tdel.c
+	C
+tx_tide.c
+	C
+tx_tpch.c
+	C
+tx_tprch.c
+	C
+tx_tt.c
+	C
+tx_ttsc.c
+	C
+tx_td.c
+	C
+tx_timcr.c
+	C
+tx_taa.c
+	C
+tx_tda.c
+	C
+tx_timch.c
+	C
+tx_timd.c
+	C
+tx_timeg.c
+	C
+tx_times.c
+	C
+tx_si.c
+	C
+tx_sc.c
+	C
+tx_sd.c
+	C
+tx_sg.c
+	C
+tx_sp.c
+	C
+tx_scle.c
+	C
+tx_qi.c
+	C
+tx_qc.c
+	C
+tx_qd.c
+	C
+tx_qs.c
+	C
+tx_qr.c
+	C
+tx_qcle.c
+	C
+tx_qf.c
+	C
+tx_efi.c
+	C
+tx_efc.c
+	C
+tx_efd.c
+	C
+tx_efg.c
+	C
+tx_efs.c
+	C
+tx_efcle.c
+	C
+tx_bpi.c
+	C
+tx_bpc.c
+	C
+tx_bpd.c
+	C
+tx_ba.c
+	C
+tx_br.c
+	C
+tx_bpcle.c
+	C
+tx_byti.c
+	C
+tx_bytc.c
+	C
+tx_bytd.c
+	C
+tx_byta.c
+	C
+tx_bytr.c
+	C
+tx_byts.c
+	C
+tx_bytcl.c
+	C
+txe_ba.c
+	C
+txe_bpc.c
+	C
+txe_bpd.c
+	C
+txe_br.c
+	C
+txe_byta.c
+	C
+txe_bytc.c
+	C
+txe_bytd.c
+	C
+txe_bytr.c
+	C
+txe_efc.c
+	C
+txe_efd.c
+	C
+txe_efg.c
+	C
+txe_efs.c
+	C
+txe_qc.c
+	C
+txe_qd.c
+	C
+txe_qf.c
+	C
+txe_qr.c
+	C
+txe_qs.c
+	C
+txe_sc.c
+	C
+txe_sd.c
+	C
+txe_sg.c
+	C
+txe_sp.c
+	C
+txe_tc.c
+	C
+txe_tdel.c
+	C
+txe_tpch.c
+	C
+txe_trpc.c
+	C
+txe_tra.c
+	C
+txe_trel.c
+	C
+txe_tsa.c
+	C
+txe_tt.c
+	C
+txe_ttsc.c
+	C
+txe_taa.c
+	C
+txe_tmch.c
+	C
+txe_tmcr.c
+	C
+txe_tda.c
+	C
+txe_timd.c
+	C
+tx_ghs.c
+    C

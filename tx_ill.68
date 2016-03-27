@@ -1,0 +1,233 @@
+/**************************************************************************/ 
+/*                                                                        */ 
+/*            Copyright (c) 1996-2000 by Express Logic Inc.               */ 
+/*                                                                        */ 
+/*  This software is copyrighted by and is the sole property of Express   */ 
+/*  Logic, Inc.  All rights, title, ownership, or other interests         */ 
+/*  in the software remain the property of Express Logic, Inc.  This      */ 
+/*  software may only be used in accordance with the corresponding        */ 
+/*  license agreement.  Any unauthorized use, duplication, transmission,  */ 
+/*  distribution, or disclosure of this software is expressly forbidden.  */ 
+/*                                                                        */
+/*  This Copyright notice may not be removed or modified without prior    */ 
+/*  written consent of Express Logic, Inc.                                */ 
+/*                                                                        */ 
+/*  Express Logic, Inc. reserves the right to modify this software        */ 
+/*  without notice.                                                       */ 
+/*                                                                        */ 
+/*  Express Logic, Inc.                                                   */
+/*  11440 West Bernardo Court               info@expresslogic.com         */
+/*  Suite 366                               http://www.expresslogic.com   */
+/*  San Diego, CA  92127                                                  */
+/*                                                                        */
+/**************************************************************************/
+
+
+/**************************************************************************/
+/**************************************************************************/
+/**                                                                       */ 
+/** ThreadX Component                                                     */ 
+/**                                                                       */
+/**   Initialize (INI)                                                    */
+/**                                                                       */
+/**************************************************************************/
+/**************************************************************************/
+
+
+/* #define    TX_SOURCE_CODE  */
+
+
+/* Include necessary system files.  */
+
+/*  #include   "tx_api.h"
+    #include   "tx_ini.h"
+    #include   "tx_thr.h"
+    #include   "tx_tim.h"  */
+
+
+/* Define 68332 Constants for the periodic interrupt timer.  */
+
+COUNTER_REG     EQU     $FFFA24             ; Address of periodic counter register
+CONTROL_REG     EQU     $FFFA22             ; Address of periodic control register
+COUNTER_VAL     EQU     $080                ; Periodic control value -> 2ms @33MHz no prescaler
+CONTROL_VAL     EQU     $210                ; Level 2, Vector 16
+
+    
+    XREF    _tx_thread_system_stack_ptr
+    XREF    _tx_initialize_unused_memory
+    XREF    _tx_thread_context_save
+    XREF    _tx_thread_context_restore
+    XREF    _tx_timer_interrupt
+    XREF    _tx_timer_stack_start
+    XREF    _tx_timer_stack_size
+    XREF    _tx_timer_priority
+    XREF    __ghsend_stack
+    XREF    __ghsbegin_freemem
+    XREF    _start
+#ifdef  TX_ENABLE_EVENT_LOGGING
+	XREF	_tx_el_interrupt
+	XREF	_tx_el_interrupt_end
+#endif
+
+
+    SECT    .text,x
+    ALIGN   4
+/**************************************************************************/ 
+/*                                                                        */ 
+/*  FUNCTION                                               RELEASE        */ 
+/*                                                                        */ 
+/*    _tx_initialize_low_level                        68332/Green Hills   */ 
+/*                                                           3.0a         */ 
+/*  AUTHOR                                                                */ 
+/*                                                                        */ 
+/*    William E. Lamie, Express Logic, Inc.                               */ 
+/*                                                                        */ 
+/*  DESCRIPTION                                                           */ 
+/*                                                                        */ 
+/*    This function is responsible for any low-level processor            */ 
+/*    initialization, including setting up interrupt vectors, saving the  */ 
+/*    system stack pointer, finding the first available memory address,   */ 
+/*    and setting up parameters for the system's timer thread.            */ 
+/*                                                                        */ 
+/*  INPUT                                                                 */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  OUTPUT                                                                */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  CALLS                                                                 */ 
+/*                                                                        */ 
+/*    None                                                                */ 
+/*                                                                        */ 
+/*  CALLED BY                                                             */ 
+/*                                                                        */ 
+/*    _tx_initialize_kernel_enter           ThreadX entry function        */ 
+/*                                                                        */ 
+/*  RELEASE HISTORY                                                       */ 
+/*                                                                        */ 
+/*    DATE              NAME                      DESCRIPTION             */ 
+/*                                                                        */ 
+/*  09-07-1999     William E. Lamie         Initial Version 3.0           */ 
+/*  12-02-1999     William E. Lamie         Modified comment(s), and      */ 
+/*                                            added interrupt logging,    */ 
+/*                                            resulting in version 3.0a.  */ 
+/*                                                                        */ 
+/**************************************************************************/ 
+/* VOID   _tx_initialize_low_level(VOID)
+{  */
+    XDEF    _tx_initialize_low_level
+_tx_initialize_low_level:
+
+    /* Save the system stack pointer.  */
+    /* _tx_thread_system_stack_ptr = (VOID_PTR) A7 (SP);  */
+
+    move.l  %A7,_tx_thread_system_stack_ptr     ; Save system stack pointer so
+                                        /*      ;   it can be used during interrupt
+                                                ;   processing and when no thread is 
+                                                ;   running.  */
+
+    /* Pickup the first available memory address.  */
+
+    move.l  #__ghsbegin_freemem,%D0             ; Pickup the first available memory
+    addq.l  #4,%D0                              ;   address
+    andi.l  #$FFFFFFFC,%D0                      ; Ensure long word alignment
+
+    /* Allocate space for the timer thread's stack.  */
+    /* _tx_timer_stack_start =        first_available_memory;
+    _tx_timer_stack_size =         stack_size;
+    _tx_timer_priority =           0;  */
+
+    move.l  %D0,_tx_timer_stack_start           ; Give the first available memory location
+                                        /*      ;   to the internal timer thread  */
+    move.l  #1024,%D1                           ; 
+    move.l  %D1,_tx_timer_stack_size            ; Specify the stack size in bytes (1KBytes)
+    add.l   _tx_timer_stack_size,%D0            ; Move up the free memory address
+    move.l  #0,%D1                              ; 
+    move.l  %D1,_tx_timer_priority              ; Setup the timer thread's priority
+
+    /* Save the first available memory address.  */
+    /* _tx_initialize_unused_memory =  (VOID_PTR) &_tx_initialize_first_memory;  */
+
+    move.l  %D0,_tx_initialize_unused_memory    ; Save it in the appropriate place
+
+
+    /* Setup the 68332 registers in order to generate a periodic interrupt for all
+       ThreadX timer related functions.  */
+
+    move.l  #COUNTER_VAL,%D0                    ; Build timer counter value
+    move.w  %D0,COUNTER_REG                     ; Setup timer counter
+    move.l  #CONTROL_VAL,%D0                    ; Build timer control value
+    move.w  %D0,CONTROL_REG                     ; Setup timer control 
+
+    /* Steal specific interrupt vector(s).  In initial ports, only the timer interrupt
+       vector is stolen.  Other vectors may be stolen in a similar manner.  */
+
+    movec   %VBR,%D1                            ; Pickup vector base register
+    movea.l %D1,%A0                             ; Setup address register
+    move.l  #_tx_timer_interrupt_entry,%D0      ; Address of timer interrupt
+    move.l  %D0,$40(%A0)                        ; Setup for Vector 16, Level 2
+
+    /* Done, return to caller.  */
+
+    rts                                         ; Return to caller
+/* }  */
+
+
+/* Define the range for all initial interrupt vectors.  The initial processing of each
+   ISR must be located between __tx_initialize_ISR_start and __tx_initialize_ISR_end.  The 
+   ISR portion after context save is called may be (and probably will be) located outside this 
+   area.  */
+
+    XDEF    _tx_initialize_ISR_start
+_tx_initialize_ISR_start:
+
+/* Define the default interrupt vector.  This should only hit if there is a serious
+   error.  */
+
+    XDEF    _tx_initialize_default_isr
+_tx_initialize_default_isr:
+	stop	#$2700
+
+/* Define timer interrupt service routine entry point.  */
+
+    XDEF    _tx_timer_interrupt_entry
+_tx_timer_interrupt_entry:
+    move.w  %SR,-(A7)                           ; Save current SR 
+    ori.w   #$0700,%SR                          ; Lockout all interrupts
+    jmp     _tx_timer_interrupt		            ; Process the timer interrupt -
+                                        /*      ;   we don't ever return!  */
+
+
+/* Define sample interrupt service routines for testing purposes.  */
+
+    XDEF    _tx_initialize_sample_ISR
+_tx_initialize_sample_ISR:
+    move.w  %SR,-(A7)                           ; Save current SR 
+    ori.w   #$0700,%SR                          ; Lockout all interrupts
+    jsr     _tx_thread_context_save             ; Save context 
+
+#ifdef  TX_ENABLE_EVENT_LOGGING
+	move.l	#0,-(%A7)							; Build interrupt code (ISR specific)
+	jsr		_tx_el_interrupt					; Call interrupt event logging
+	addq.l	#4,%A7								; Recover stack space
+#endif
+
+    nop                                         ; 
+    nop                                         ; Actual ISR code goes here!
+    nop                                         ; 
+
+#ifdef  TX_ENABLE_EVENT_LOGGING
+	move.l	#0,-(%A7)							; Build interrupt code (ISR specific)
+	jsr		_tx_el_interrupt_end				; Call interrupt event logging
+	addq.l	#4,%A7								; Recover stack space
+#endif
+
+    jmp     _tx_thread_context_restore          ; Restore context, never come back!
+
+
+    XDEF    _tx_initialize_ISR_end
+_tx_initialize_ISR_end:
+    nop
+    END
